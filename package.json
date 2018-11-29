@@ -1,0 +1,32 @@
+{
+  "name": "docs-api-nda-generator",
+  "version": "1.0.0",
+  "description": "Automatic NDA generator with Apps Script and Docs API v1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sheetgo/docs-api-nda-generator"
+  },
+  "author": {
+    "name": "Willian Vargas",
+    "email": "willian@sheetgo.com",
+    "url": "https://github.com/willianvargas"
+  },
+  "contributors": [
+    {
+      "name": "Fernando",
+      "email": "fernando@sheetgo.com"
+    }
+  ],
+  "license": "MIT",
+  "keywords": [
+    "docs-api",
+    "apps-script",
+    "nda",
+    "non-disclosure-agreement",
+    "google-sheets"
+  ],
+  "dependencies": {
+    "eslint": "^5.9.0",
+    "eslint-plugin-googleappsscript": "^1.0.1"
+  }
+}
