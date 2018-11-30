@@ -71,3 +71,34 @@ function saveAsPDF(id, name, folder) {
     return folder.createFile(fileBlob)
 
 }
+
+/**
+ * Returns repository folder and create if not exists
+ */
+function getRepositoryFolder() {
+    // Get NDA doc name from settings sheet
+    var repositoryFolderName = SpreadsheetApp.getActive()
+        .getSheetByName('Settings')
+        .getRange('C8')
+        .getValue()
+
+    var repositoryFolder = null
+    var parentFolderId = DriveApp.getFolderById(SpreadsheetApp.getActive().getId()).getParents().next().getId()
+    var childrenFolders = DriveApp.getFolderById(parentFolderId).getFolders()
+
+    // Checks if nda folder exists
+    while (childrenFolders.hasNext()) {
+        var childfolder = childrenFolders.next()
+        if (childfolder.getName() === repositoryFolderName) {
+            repositoryFolder = childfolder
+        }
+    }
+
+    // Create nda folder if not exists
+    if (!repositoryFolder) {
+        repositoryFolder = DriveApp.getFolderById(parentFolderId).createFolder(repositoryFolderName)
+    }
+
+    return repositoryFolder
+}
+

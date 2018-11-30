@@ -98,7 +98,8 @@ function run() {
 
         // Get the repository folder
         var folder = getRepositoryFolder()
-
+        
+        var formSheet = SpreadsheetApp.getActive().getSheetByName('Form Responses')
         data.forEach(function(item) {
 
             // Get the current date formatted
@@ -109,7 +110,14 @@ function run() {
 
             // Copy the template file and save into the folder
             var driveFile = copyFile(templateId, fileName, folder)
-
+            
+            // Set link and status on sheet
+            var statusCollunm = getCollumIndexByName('NDA Status')
+            var linkCollunm = getCollumIndexByName('NDA Link PDF')
+            
+            formSheet.getRange(item['rowIndex'], statusCollunm).setValue('sent')
+            formSheet.getRange(item['rowIndex'], linkCollunm).setValue('sent')
+            
             // Merge the texts
             mergeTexts(driveFile.getId(), item)
 
@@ -123,6 +131,18 @@ function run() {
         showUiDialog('Something went wrong', e.message)
 
     }
+}
+
+/**
+ * Returns the collunm index number based on name
+ */
+function getCollumIndexByName(collunmName){
+  var sheet = SpreadsheetApp.getActive().getSheetByName('Form Responses')
+  var data = sheet.getDataRange().getValues();
+  
+  var collunmIndex = data[0].indexOf(collunmName);
+  
+  return collunmIndex
 }
 
 /**
@@ -159,36 +179,6 @@ function getSettings() {
 }
 
 /**
- * Returns repository folder and create if not exists
- */
-function getRepositoryFolder() {
-    // Get NDA doc name from settings sheet
-    var repositoryFolderName = SpreadsheetApp.getActive()
-        .getSheetByName('Settings')
-        .getRange('C8')
-        .getValue()
-
-    var repositoryFolder = null
-    var parentFolderId = DriveApp.getFolderById(SpreadsheetApp.getActive().getId()).getParents().next().getId()
-    var childrenFolders = DriveApp.getFolderById(parentFolderId).getFolders()
-
-    // Checks if nda folder exists
-    while (childrenFolders.hasNext()) {
-        var childfolder = childrenFolders.next()
-        if (childfolder.getName() === repositoryFolderName) {
-            repositoryFolder = childfolder
-        }
-    }
-
-    // Create nda folder if not exists
-    if (!repositoryFolder) {
-        repositoryFolder = DriveApp.getFolderById(parentFolderId).createFolder(repositoryFolderName)
-    }
-
-    return repositoryFolder
-}
-
-/**
  * Get formatted data from range
  */
 function getFormattedData() {
@@ -203,7 +193,8 @@ function getFormattedData() {
     var jsonFormatted = this.parseDataToJsonArray(data)
 
     // Filter sent NDAs
-    jsonFormatted = jsonFormatted.filter(function(item) {
+    jsonFormatted = jsonFormatted.filter(function(item, filter) {
+      item['rowIndex'] = index
         if (item['NDA Status'] !== 'sent') {
             delete item['Timestamp']
             delete item['NDA Status']
