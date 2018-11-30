@@ -94,34 +94,39 @@ function run() {
         var timezone = SpreadsheetApp.getActive().getSpreadsheetTimeZone()
 
         // Get the form data to generate the NDAs
-        var data = this.getFormattedData()
+        var NDAFormData = this.getNDAFormData()
 
         // Get the repository folder
         var folder = getRepositoryFolder()
-        
+
+        // Get the form sheet
         var formSheet = SpreadsheetApp.getActive().getSheetByName('Form Responses')
-        data.forEach(function(item) {
+
+        // Get link and status on sheet
+        var statusColumn = getColumnIndexByName('NDA Status')
+        var linkColumn = getColumnIndexByName('NDA Link PDF')
+
+        NDAFormData.forEach(function(item) {
 
             // Get the current date formatted
             var dateFormatted = Utilities.formatDate(new Date(), timezone, 'MMM dd, yyyy HH:mm')
 
             // Generate the file name
-            var fileName = 'NDA - ' + item['Full Name'] + ' - ' + dateFormatted
+            var fileName = 'NDA - ' + item.data['Full Name'] + ' - ' + dateFormatted
 
             // Copy the template file and save into the folder
             var driveFile = copyFile(templateId, fileName, folder)
-            
-            // Set link and status on sheet
-            var statusCollunm = getCollumIndexByName('NDA Status')
-            var linkCollunm = getCollumIndexByName('NDA Link PDF')
-            
-            formSheet.getRange(item['rowIndex'], statusCollunm).setValue('sent')
-            formSheet.getRange(item['rowIndex'], linkCollunm).setValue('sent')
-            
-            // Merge the texts
-            mergeTexts(driveFile.getId(), item)
 
-            saveAsPDF(driveFile.getId(), fileName, folder)
+            // Merge the texts
+            mergeTexts(driveFile.getId(), item.data)
+
+            // Save the PDF file on the repository folder
+            var pdfFile = saveAsPDF(driveFile.getId(), fileName, folder)
+
+            formSheet.getRange(item.rowIndex, statusColumn).setValue('sent')
+            // formSheet.getRange(item.rowIndex, linkColumn).setValue(pdfFile.getURL())
+
+            sendMail(item.data['Email Address'], item.data['Full Name'], pdfFile)
 
         })
 
@@ -134,15 +139,12 @@ function run() {
 }
 
 /**
- * Returns the collunm index number based on name
+ * Returns the Column index number based on name
  */
-function getCollumIndexByName(collunmName){
-  var sheet = SpreadsheetApp.getActive().getSheetByName('Form Responses')
-  var data = sheet.getDataRange().getValues();
-  
-  var collunmIndex = data[0].indexOf(collunmName);
-  
-  return collunmIndex
+function getColumnIndexByName(ColumnName) {
+    var sheet = SpreadsheetApp.getActive().getSheetByName('Form Responses')
+    var data = sheet.getDataRange().getValues()
+    return data[0].indexOf(ColumnName) + 1
 }
 
 /**
@@ -179,9 +181,9 @@ function getSettings() {
 }
 
 /**
- * Get formatted data from range
+ * Get the NDA From data formatted from range
  */
-function getFormattedData() {
+function getNDAFormData() {
 
     // Get all data
     var data = SpreadsheetApp
@@ -193,12 +195,18 @@ function getFormattedData() {
     var jsonFormatted = this.parseDataToJsonArray(data)
 
     // Filter sent NDAs
-    jsonFormatted = jsonFormatted.filter(function(item, filter) {
-      item['rowIndex'] = index
-        if (item['NDA Status'] !== 'sent') {
-            delete item['Timestamp']
-            delete item['NDA Status']
-            delete item['NDA Link PDF']
+    jsonFormatted = jsonFormatted
+        .map(function(item, index) {
+            return {
+                rowIndex: index + 2,
+                data: item
+            }
+        })
+        .filter(function(item) {
+        if (item.data['NDA Status'] !== 'sent') {
+            delete item.data['Timestamp']
+            delete item.data['NDA Status']
+            delete item.data['NDA Link PDF']
             return item
         }
     })
@@ -244,8 +252,8 @@ function sendMail(emailAddress, fullName, attachment) {
     var emailContent = SpreadsheetApp.getActive().getSheetByName('Settings').getRange('C6').getValue()
 
     // Parse line breaks
-    emailContent = emailContent.replace(/(\r\n|\n|\r)/gm, "<br>")
-    var body = '<p>Hello ' + fullName + ',</p><br><p>' + emailContent + '</p>'
+    emailContent = emailContent.replace(/(\r\n|\n|\r)/gm, '<br>')
+    var body = '<p>Hello ' + fullName + ',</p><p>' + emailContent + '</p>'
 
-    MailApp.sendEmail(emailAddress, emailSubject, body, { htmlBody: body, attachments: [attachment] })
+    MailApp.sendEmail(emailAddress, emailSubject, body, {htmlBody: body, attachments: [attachment]})
 }

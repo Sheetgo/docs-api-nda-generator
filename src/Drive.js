@@ -73,6 +73,14 @@ function saveAsPDF(id, name, folder) {
 }
 
 /**
+ * Delete a file
+ * @param {object} id - The file id
+ */
+function deleteFile(id) {
+    Drive.Files.remove(id)
+}
+
+/**
  * Returns repository folder and create if not exists
  */
 function getRepositoryFolder() {
@@ -101,4 +109,3 @@ function getRepositoryFolder() {
 
     return repositoryFolder
 }
-
