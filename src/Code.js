@@ -162,6 +162,36 @@ function moveFile(file, dest_folder) {
 }
 
 /**
+ * Returns repository folder and create if not exists
+ */
+function getRepositoryFolder() {
+    // Get NDA doc name from settings sheet
+    var repositoryFolderName = SpreadsheetApp.getActive()
+        .getSheetByName('Settings')
+        .getRange('C8')
+        .getValue()
+
+    var repositoryFolder = null
+    var parentFolderId = DriveApp.getFolderById(SpreadsheetApp.getActive().getId()).getParents().next().getId()
+    var childrenFolders = DriveApp.getFolderById(parentFolderId).getFolders()
+
+    // Checks if nda folder exists
+    while (childrenFolders.hasNext()) {
+        var childfolder = childrenFolders.next()
+        if (childfolder.getName() == repositoryFolderName) {
+            repositoryFolder = childfolder
+        }
+    }
+
+    // Create nda folder if not exists
+    if (!repositoryFolder) {
+        repositoryFolder = DriveApp.getFolderById(parentFolderId).createFolder(repositoryFolderName)
+    }
+
+    return repositoryFolder
+}
+
+/**
  * Get formatted data from range
  */
 function getFormattedData() {
@@ -209,4 +239,21 @@ function parseDataToJsonArray(data) {
     }
 
     return result
+}
+
+/**
+ * Sends an email
+ * @param {string} emailAddress A destination email address
+ * @param {string} fullName A full name of email address owner 
+ * @param {File} attachment A DriveApp File instance 
+ */
+function sendMail(emailAddress, fullName, attachment) {
+    var emailSubject = SpreadsheetApp.getActive().getSheetByName('Settings').getRange('C4').getValue()
+    var emailContent = SpreadsheetApp.getActive().getSheetByName('Settings').getRange('C6').getValue()
+
+    // Parse line breaks
+    emailContent = emailContent.replace(/(\r\n|\n|\r)/gm, "<br>")
+    var body = '<p>Hello ' + fullName + ',</p><br><p>' + emailContent + '</p>'
+
+    MailApp.sendEmail(emailAddress, emailSubject, body, { htmlBody: body, attachments: [attachment] })
 }
