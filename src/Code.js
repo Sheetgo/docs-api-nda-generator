@@ -42,19 +42,19 @@ function onOpen(e) {
 function install() {
     try {
         // Create the Solution folder on users Drive 
-        var folder = DriveApp.createFolder('NDA Generator');
-        var solutionFolderId = folder.getId();
+        var folder = DriveApp.createFolder('NDA Generator')
+        var solutionFolderId = folder.getId()
 
         // Move host spreadsheet
-        var spreadsheetFile = DriveApp.getFileById(SpreadsheetApp.getActive().getId());
+        var spreadsheetFile = DriveApp.getFileById(SpreadsheetApp.getActive().getId())
         this.moveFile(spreadsheetFile, folder)
 
         // Move linked form
-        var form = FormApp.openByUrl(SpreadsheetApp.getActive().getFormUrl());
-        this.moveFile(DriveApp.getFileById(form.getId()), folder);
+        var form = FormApp.openByUrl(SpreadsheetApp.getActive().getFormUrl())
+        this.moveFile(DriveApp.getFileById(form.getId()), folder)
 
         // Make a copy of NDA document 
-        var ndaTemplateFileId = DriveApp.getFileById('1InRRZT3XumIZCfN7k1fWl7dke0S1NPVnUqV9OdhGku4').makeCopy("Non Disclosure Agreement Template", folder).getId();
+        var ndaTemplateFileId = DriveApp.getFileById('1InRRZT3XumIZCfN7k1fWl7dke0S1NPVnUqV9OdhGku4').makeCopy("Non Disclosure Agreement Template", folder).getId()
 
         // Set NDA doc id on settings tab
         SpreadsheetApp.getActive()
@@ -63,8 +63,8 @@ function install() {
             .setValue(ndaTemplateFileId)
 
         // Create PDFs folder
-        var actualFolderId = DriveApp.getFileById(SpreadsheetApp.getActive().getId()).getParents().next().getId();
-        DriveApp.getFolderById(actualFolderId).createFolder('PDF Folder');
+        var actualFolderId = DriveApp.getFileById(SpreadsheetApp.getActive().getId()).getParents().next().getId()
+        DriveApp.getFolderById(actualFolderId).createFolder('PDF Folder')
 
     } catch (e) {
 
@@ -151,10 +151,10 @@ function getSettings() {
  * @param {Object} dest_folder A folder object in Google Drive 
  */
 function moveFile(file, dest_folder) {
-    dest_folder.addFile(file);
-    var parents = file.getParents();
+    dest_folder.addFile(file)
+    var parents = file.getParents()
     while (parents.hasNext()) {
-        var folder = parents.next();
+        var folder = parents.next()
         if (folder.getId() != dest_folder.getId()) {
             folder.removeFile(file)
         }
@@ -168,9 +168,9 @@ function getFormattedData() {
     // Get all data 
     var data = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Form Responses')
         .getDataRange()
-        .getValues();
+        .getValues()
 
-    var jsonFormatted = this.parseDataToJsonArray(data);
+    var jsonFormatted = this.parseDataToJsonArray(data)
 
     // Filter sent NDAs
     jsonFormatted = jsonFormatted.filter(function (item) {
@@ -189,24 +189,24 @@ function getFormattedData() {
  */
 function parseDataToJsonArray(data) {
 
-    var obj = {};
-    var result = [];
-    var headers = data[0];
-    var cols = headers.length;
-    var row = [];
+    var obj = {}
+    var result = []
+    var headers = data[0]
+    var cols = headers.length
+    var row = []
 
     for (var i = 1, l = data.length; i < l; i++) {
         // get a row to fill the object
-        row = data[i];
+        row = data[i]
         // clear object
-        obj = {};
+        obj = {}
         for (var col = 0; col < cols; col++) {
             // fill object with new values
-            obj[headers[col]] = row[col];
+            obj[headers[col]] = row[col]
         }
         // add object in a final result
-        result.push(obj);
+        result.push(obj)
     }
 
-    return result;
+    return result
 }
