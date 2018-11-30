@@ -113,6 +113,8 @@ function run() {
             // Merge the texts
             mergeTexts(driveFile.getId(), item)
 
+            saveAsPDF(driveFile.getId(), fileName, folder)
+
         })
 
     } catch (e) {

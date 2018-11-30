@@ -51,18 +51,23 @@ function moveFile(file, dest_folder) {
 }
 
 /**
- * Save a blob into a Google Drive file
- * @param {object} blob - The binary information of the file
+ * Converts a file to PDF and save it on a folder
+ * @param {object} id - The file id
  * @param {string} name - The file name
  * @param {object} folder - Folder object in Google Drive
  */
-function saveBlobAsFile(blob, name, folder) {
-    // var doc = DocumentApp.openById(id)
-    // var docBlob = DocumentApp.openById(id).getAs('application/pdf')
-    // docBlob.setName(doc.getName() + ".pdf") // Add the PDF extension
-    // var invFolder = SETTINGS.folderId
-    var file = DriveApp.getFolderById(folder).createFile(docBlob)
-    var url = file.getUrl()
-    var id = file.getId()
-    return [url, id]
+function saveAsPDF(id, name, folder) {
+
+    // Open the file
+    var file = DriveApp.getFileById(id)
+
+    // Get the file binary data as pdf
+    var fileBlob = file.getBlob().getAs('application/pdf')
+
+    // Add the PDF extension
+    fileBlob.setName(file.getName() + ".pdf")
+
+    // Create the file on the folder and return
+    return folder.createFile(fileBlob)
+
 }
