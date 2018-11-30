@@ -11,11 +11,13 @@
  *
  */
 
+var NDA_DOCS_TEMPLATE_ID = '1InRRZT3XumIZCfN7k1fWl7dke0S1NPVnUqV9OdhGku4'
+var NDA_DOCS_TEMPLATE_TITLE = 'Non Disclosure Agreement Template'
+
 /**
  * Creates the Topbar menu in the spreadsheet. This function is fired every time a spreadsheet is open
  * @param {object} e - User and spreadsheet basic parameters
  */
-
 function onOpen(e) {
 
     // Get the context
@@ -36,35 +38,37 @@ function onOpen(e) {
 }
 
 /**
- * Runs the install script function, create a solution folder with this spreadsheet, copy of NDA doc 
- * and another folder for PDFs.
+ * Makes a copy of the main NDA Docs template, creates the template folder,
+ * moves the active spreadsheet into it, and creates a folder for the PDFs
  */
 function install() {
     try {
-        // Create the Solution folder on users Drive 
-        var folder = DriveApp.createFolder('NDA Generator')
-        var solutionFolderId = folder.getId()
 
-        // Move host spreadsheet
+        // Create the Solution folder on users Drive
+        var folder = DriveApp.createFolder('NDA Generator')
+
+        // Move the active spreadsheet
         var spreadsheetFile = DriveApp.getFileById(SpreadsheetApp.getActive().getId())
         this.moveFile(spreadsheetFile, folder)
 
-        // Move linked form
+        // Move the attached Google Form
         var form = FormApp.openByUrl(SpreadsheetApp.getActive().getFormUrl())
         this.moveFile(DriveApp.getFileById(form.getId()), folder)
 
-        // Make a copy of NDA document 
-        var ndaTemplateFileId = DriveApp.getFileById('1InRRZT3XumIZCfN7k1fWl7dke0S1NPVnUqV9OdhGku4').makeCopy("Non Disclosure Agreement Template", folder).getId()
+        // Make a copy of NDA document
+        var ndaTemplateFileId = DriveApp
+            .getFileById(NDA_DOCS_TEMPLATE_ID)
+            .makeCopy(NDA_DOCS_TEMPLATE_TITLE, folder)
+            .getId()
 
         // Set NDA doc id on settings tab
         SpreadsheetApp.getActive()
             .getSheetByName('Settings')
-            .getRange('c2')
+            .getRange('C2')
             .setValue(ndaTemplateFileId)
 
-        // Create PDFs folder
-        var actualFolderId = DriveApp.getFileById(SpreadsheetApp.getActive().getId()).getParents().next().getId()
-        DriveApp.getFolderById(actualFolderId).createFolder('PDF Folder')
+        // Activate the trigger
+        toggleTrigger()
 
     } catch (e) {
 
@@ -75,15 +79,41 @@ function install() {
 }
 
 /**
- * Runs the main script function, gets Youtube data and writes on the spreadsheet
+ * Runs the main script function
  */
 function run() {
     try {
-        // Parse to object
+
+        // Get NDA Doc template from settings sheet
+        var templateId = SpreadsheetApp.getActive()
+            .getSheetByName('Settings')
+            .getRange('C2')
+            .getValue()
+
+        // Get spreadsheet timezone
+        var timezone = SpreadsheetApp.getActive().getSpreadsheetTimeZone()
+
+        // Get the form data to generate the NDAs
         var data = this.getFormattedData()
 
-        Logger.log(data)
+        // Get the repository folder
+        var folder = getRepositoryFolder()
 
+        data.forEach(function(item) {
+
+            // Get the current date formatted
+            var dateFormatted = Utilities.formatDate(new Date(), timezone, 'MMM dd, yyyy HH:mm')
+
+            // Generate the file name
+            var fileName = 'NDA - ' + item['Full Name'] + ' - ' + dateFormatted
+
+            // Copy the template file and save into the folder
+            var driveFile = copyFile(templateId, fileName, folder)
+
+            // Merge the texts
+            mergeTexts(driveFile.getId(), item)
+
+        })
 
     } catch (e) {
 
@@ -94,41 +124,16 @@ function run() {
 }
 
 /**
- * Switch on/off the trigger that will run daily at midnight to update the data
+ * Switch on the trigger that will run on form submit to generate the NDA
  */
 function toggleTrigger() {
     try {
 
-        // Get all the user's trigger
-        var triggers = ScriptApp.getUserTriggers(SpreadsheetApp.getActiveSpreadsheet())
-
-        // If has triggers
-        if (triggers && triggers.length > 0) {
-
-            // Disable all the triggers
-            for (var i in triggers) {
-                if (triggers.hasOwnProperty(i)) {
-                    ScriptApp.deleteTrigger(triggers[i])
-                }
-            }
-
-            // Show the message
-            showUiDialog(
-                'Automatic update',
-                'The trigger was DISABLED'
-            )
-
-        } else {
-
-            // Create the trigger
-            ScriptApp.newTrigger('run').timeBased().atHour(0).everyDays(1).create()
-
-            // Show the message
-            showUiDialog(
-                'Automatic update',
-                'The trigger was ENABLED, and will run every day at midnight to update the data'
-            )
-        }
+        var sheet = SpreadsheetApp.getActive()
+        ScriptApp.newTrigger('run')
+            .forSpreadsheet(sheet)
+            .onFormSubmit()
+            .create()
 
     } catch (e) {
 
@@ -138,26 +143,16 @@ function toggleTrigger() {
 }
 
 /**
- * Gets the template settings
+ * Gets the user settings
  * @returns {object}
  */
 function getSettings() {
-    return getValue('Settings', 'C2')
-}
-
-/**
- * Move a file from one folder into another
- * @param {Object} file A file object in Google Drive
- * @param {Object} dest_folder A folder object in Google Drive 
- */
-function moveFile(file, dest_folder) {
-    dest_folder.addFile(file)
-    var parents = file.getParents()
-    while (parents.hasNext()) {
-        var folder = parents.next()
-        if (folder.getId() != dest_folder.getId()) {
-            folder.removeFile(file)
-        }
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Settings')
+    return {
+        template: sheet.getRange('C2').getValue(),
+        email_subject: sheet.getRange('C4').getValue(),
+        email_body: sheet.getRange('C6').getValue(),
+        repository: sheet.getRange('C8').getValue()
     }
 }
 
@@ -178,7 +173,7 @@ function getRepositoryFolder() {
     // Checks if nda folder exists
     while (childrenFolders.hasNext()) {
         var childfolder = childrenFolders.next()
-        if (childfolder.getName() == repositoryFolderName) {
+        if (childfolder.getName() === repositoryFolderName) {
             repositoryFolder = childfolder
         }
     }
@@ -195,16 +190,20 @@ function getRepositoryFolder() {
  * Get formatted data from range
  */
 function getFormattedData() {
-    // Get all data 
-    var data = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Form Responses')
+
+    // Get all data
+    var data = SpreadsheetApp
+        .getActiveSpreadsheet()
+        .getSheetByName('Form Responses')
         .getDataRange()
         .getValues()
 
     var jsonFormatted = this.parseDataToJsonArray(data)
 
     // Filter sent NDAs
-    jsonFormatted = jsonFormatted.filter(function (item) {
-        if (item['NDA Status'] != 'sent') {
+    jsonFormatted = jsonFormatted.filter(function(item) {
+        if (item['NDA Status'] !== 'sent') {
+            delete item['Timestamp']
             delete item['NDA Status']
             delete item['NDA Link PDF']
             return item
@@ -244,8 +243,8 @@ function parseDataToJsonArray(data) {
 /**
  * Sends an email
  * @param {string} emailAddress A destination email address
- * @param {string} fullName A full name of email address owner 
- * @param {File} attachment A DriveApp File instance 
+ * @param {string} fullName A full name of email address owner
+ * @param {File} attachment A DriveApp File instance
  */
 function sendMail(emailAddress, fullName, attachment) {
     var emailSubject = SpreadsheetApp.getActive().getSheetByName('Settings').getRange('C4').getValue()
