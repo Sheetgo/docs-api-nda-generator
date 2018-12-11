@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Automated NDA Generator</title>
+    <style>
+        body {
+            font-family: arial, sans-serif;
+        }
+        body > div {
+            display: none;
+            position: fixed;
+            width: 192px;
+            top: 50%;
+            left: 50%;
+            margin-left: 20px;
+            text-align: center;
+            transform: translate(-50%, -50%);
+        }
+        body.loading #loading {
+            display: block;
+        }
+        body.success #success {
+            display: block;
+        }
+        body.error #error {
+            display: block;
+        }
+        p {
+            font-size: 15px;
+            margin: 14px 0 0;
+        }
+        p.details {
+            font-size: 13px;
+            margin: 24px 0 16px;
+        }
+    </style>
+</head>
+<body class="loading">
+    <div id="loading">
+        <img src="http://cartechnology.co.uk/images/CarTechnologyTheCure/spinner_big.gif"
+            width="64px" height="64px">
+        <p>please wait...</p>
+    </div>
+    <div id="success">
+        <p>The NDA Generator has been installed successfully!</p>
+        <p class="details">
+            You can access the files in the
+            <a id="folder_link" target="_blank" href="#">Automated NDA Generator</a>
+            folder created in your Drive
+        </p>
+    </div>
+    <div id="error">
+        <p>Error on install the NDA Generator</p>
+        <p id="error_message" class="details"></p>
+    </div>
+    <script>
+        function install() {
+            google.script.run.withSuccessHandler(function(response) {
+                document.getElementById('folder_link').setAttribute('href', response)
+                document.getElementsByTagName('body')[0].className = "success"
+            }).withFailureHandler(function(e) {
+                document.getElementById('error_message').innerHTML = 'Error: ' + e
+                document.getElementsByTagName('body')[0].className = "error"
+            }).install()
+        }
+        install()
+    </script>
+</body>
+</html>

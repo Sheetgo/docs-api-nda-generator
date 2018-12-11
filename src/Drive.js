@@ -12,7 +12,15 @@
  */
 
 /**
- * Copy a file, rename it and move it into the solution folder
+ * Creates a folder
+ * @param {string} name - The folder name
+ */
+function createFolder(name) {
+    return DriveApp.createFolder(name)
+}
+
+/**
+ * Copies a file, rename it and move it into the solution folder
  * @param {string} id - The file id to be copied
  * @param {string} [fileName] - New file name
  * @param {object} [folder] - Folder object in Google Drive
@@ -27,7 +35,7 @@ function copyFile(id, fileName, folder) {
 
     // If has a folder, move the new file there
     if (folder) {
-        moveFile(newFile, folder)
+        moveFile(newFile.getId(), folder)
     }
 
     // Return the new file
@@ -35,13 +43,22 @@ function copyFile(id, fileName, folder) {
 }
 
 /**
- * Move a file from one folder into another
- * @param {object} file - A file object in Google Drive
+ * Moves a file from one folder into another
+ * @param {string} id - The file id to be moved
  * @param {object} dest_folder - A folder object in Google Drive
  */
-function moveFile(file, dest_folder) {
+function moveFile(id, dest_folder) {
+
+    // Open the file
+    var file = DriveApp.getFileById(id)
+
+    // Add file to the folder
     dest_folder.addFile(file)
+
+    // Get file parent folders
     var parents = file.getParents()
+
+    // Remove the file from the other parents
     while (parents.hasNext()) {
         var folder = parents.next()
         if (folder.getId() !== dest_folder.getId()) {
@@ -54,7 +71,7 @@ function moveFile(file, dest_folder) {
  * Converts a file to PDF and save it on a folder
  * @param {object} id - The file id
  * @param {string} name - The file name
- * @param {object} folder - Folder object in Google Drive
+ * @param {object} folder - Drive Folder object
  */
 function saveAsPDF(id, name, folder) {
 
@@ -73,28 +90,38 @@ function saveAsPDF(id, name, folder) {
 }
 
 /**
- * Delete a file
- * @param {object} id - The file id
+ * Removes a file - sent it the trash folder
+ * @param {string} id - The file id
  */
-function deleteFile(id) {
+function removeFile(id) {
     Drive.Files.remove(id)
 }
 
 /**
- * Returns repository folder and create if not exists
+ * Returns the Drive file link
+ * @param {string} id - The file id
+ * @returns {string}
  */
-function getRepositoryFolder() {
-    // Get NDA doc name from settings sheet
-    var repositoryFolderName = SpreadsheetApp.getActive()
-        .getSheetByName('Settings')
-        .getRange('C8')
-        .getValue()
+function getFileURL(id) {
+    var file = Drive.Files.get(id)
+    return file['alternateLink']
+}
+
+
+/**
+ * Returns the repository folder and create if not exists
+ * @param {string} spreadsheetId - The spreadsheet id for reference to get the repository folder
+ */
+function getRepositoryFolder(spreadsheetId) {
+
+    // Get NDA doc name from settings
+    var repositoryFolderName = NDA_SETTINGS['repository_name']
 
     var repositoryFolder = null
-    var parentFolderId = DriveApp.getFolderById(SpreadsheetApp.getActive().getId()).getParents().next().getId()
+    var parentFolderId = DriveApp.getFolderById(spreadsheetId).getParents().next().getId()
     var childrenFolders = DriveApp.getFolderById(parentFolderId).getFolders()
 
-    // Checks if nda folder exists
+    // Check if nda folder exists
     while (childrenFolders.hasNext()) {
         var childfolder = childrenFolders.next()
         if (childfolder.getName() === repositoryFolderName) {

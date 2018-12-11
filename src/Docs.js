@@ -31,8 +31,5 @@ function mergeTexts(docId, substitutions) {
             }
         })
     var batchRequests = { requests: requests }
-    var response = Docs.Documents.batchUpdate(
-        batchRequests,
-        'documents/' + docId
-    )
+    var response = Docs.Documents.batchUpdate(batchRequests, docId)
 }

@@ -11,8 +11,10 @@
  *
  */
 
+var NDA_SETTINGS_SPREADSHEET = '15cA7P0Tna5bN0smgNu16XDatoFf5_YogJl6PlM1PdV8'
 var NDA_DOCS_TEMPLATE_ID = '1InRRZT3XumIZCfN7k1fWl7dke0S1NPVnUqV9OdhGku4'
 var NDA_DOCS_TEMPLATE_TITLE = 'Non Disclosure Agreement Template'
+var NDA_SETTINGS = {}
 
 /**
  * Creates the Topbar menu in the spreadsheet. This function is fired every time a spreadsheet is open
@@ -27,10 +29,10 @@ function onOpen(e) {
     var menu = ui.createMenu('NDA Generator')
 
     // Check if user is already authorized
-    if (e && e.authMode === ScriptApp.AuthMode.LIMITED) {
-        menu.addItem('Install', 'install')
-    } else {
+    if (isInstalled()) {
         menu.addItem('Run', 'run')
+    } else {
+        menu.addItem('Install', 'showInstallDialog')
     }
 
     // Add the menu to the spreadsheet
@@ -38,69 +40,96 @@ function onOpen(e) {
 }
 
 /**
+ * Checks if the solution is installed by getting the Settings sheet
+ * @returns {boolean}
+ */
+function isInstalled() {
+
+    // Get the current spreadsheet
+    var activeSpreadsheet = SpreadsheetApp.getActive()
+
+    // Get settings sheet
+    var sheet = activeSpreadsheet.getSheetByName('Settings')
+
+    return sheet !== null
+}
+
+/**
+ * Loads the showDialog
+ */
+function showInstallDialog() {
+    var html = HtmlService.createTemplateFromFile('Dialog.html')
+    html = html.evaluate().setSandboxMode(HtmlService.SandboxMode.IFRAME).setWidth(220).setHeight(120)
+    SpreadsheetApp.getUi().showModalDialog(html, "Automated NDA Generator")
+}
+
+/**
  * Makes a copy of the main NDA Docs template, creates the template folder,
  * moves the active spreadsheet into it, and creates a folder for the PDFs
  */
 function install() {
-    try {
 
-        // Create the Solution folder on users Drive
-        var folder = DriveApp.createFolder('NDA Generator')
+    // Get the current spreadsheet
+    var activeSpreadsheet = SpreadsheetApp.getActive()
 
-        // Move the active spreadsheet
-        var spreadsheetFile = DriveApp.getFileById(SpreadsheetApp.getActive().getId())
-        this.moveFile(spreadsheetFile, folder)
+    // Copy the template settings sheet
+    SpreadsheetApp
+        .openById(NDA_SETTINGS_SPREADSHEET)
+        .getSheetByName('Settings')
+        .copyTo(activeSpreadsheet)
+        .setName('Settings')
 
-        // Move the attached Google Form
-        var form = FormApp.openByUrl(SpreadsheetApp.getActive().getFormUrl())
-        this.moveFile(DriveApp.getFileById(form.getId()), folder)
+    // Create the Solution folder on users Drive
+    var folder = createFolder('Automated NDA Generator')
 
-        // Make a copy of NDA document
-        var ndaTemplateFileId = DriveApp
-            .getFileById(NDA_DOCS_TEMPLATE_ID)
-            .makeCopy(NDA_DOCS_TEMPLATE_TITLE, folder)
-            .getId()
+    // Move the active spreadsheet
+    moveFile(activeSpreadsheet.getId(), folder)
 
-        // Set NDA doc id on settings tab
-        SpreadsheetApp.getActive()
-            .getSheetByName('Settings')
-            .getRange('C2')
-            .setValue(ndaTemplateFileId)
+    // Move the attached Google Form
+    moveFile(FormApp.openByUrl(activeSpreadsheet.getFormUrl()).getId(), folder)
 
-        // Activate the trigger
-        toggleTrigger()
+    // Make a copy of NDA document
+    var ndaTemplateFile = copyFile(NDA_DOCS_TEMPLATE_ID, NDA_DOCS_TEMPLATE_TITLE, folder)
 
-    } catch (e) {
+    // Set NDA doc id on settings tab
+    getNamedRange('template_id').setValue(ndaTemplateFile.getId())
 
-        // Show the error
-        showUiDialog('Something went wrong', e.message)
+    // Activate the trigger
+    toggleTrigger()
 
-    }
+    // Update the Topbar menu
+    onOpen()
+
+    // Return NDA folder URL
+    return folder.getUrl()
+
 }
 
 /**
- * Runs the main script function
+ * Generate the NDA documents
  */
 function run() {
     try {
 
-        // Get NDA Doc template from settings sheet
-        var templateId = SpreadsheetApp.getActive()
-            .getSheetByName('Settings')
-            .getRange('C2')
-            .getValue()
+        NDA_SETTINGS = getSettings()
+
+        // Get the current spreadsheet
+        var activeSpreadsheet = SpreadsheetApp.getActive()
+
+        // Get NDA Doc template from settings
+        var templateId = NDA_SETTINGS['template_id']
 
         // Get spreadsheet timezone
-        var timezone = SpreadsheetApp.getActive().getSpreadsheetTimeZone()
+        var timezone = activeSpreadsheet.getSpreadsheetTimeZone()
 
         // Get the form data to generate the NDAs
         var NDAFormData = this.getNDAFormData()
 
         // Get the repository folder
-        var folder = getRepositoryFolder()
+        var folder = getRepositoryFolder(activeSpreadsheet.getId())
 
         // Get the form sheet
-        var formSheet = SpreadsheetApp.getActive().getSheetByName('Form Responses')
+        var formSheet = activeSpreadsheet.getSheetByName('Form Responses')
 
         // Get link and status on sheet
         var statusColumn = getColumnIndexByName('NDA Status')
@@ -123,10 +152,17 @@ function run() {
             // Save the PDF file on the repository folder
             var pdfFile = saveAsPDF(driveFile.getId(), fileName, folder)
 
-            formSheet.getRange(item.rowIndex, statusColumn).setValue('sent')
-            // formSheet.getRange(item.rowIndex, linkColumn).setValue(pdfFile.getURL())
+            // Save the PDF URL in the NDA spreadsheet
+            formSheet.getRange(item.rowIndex, linkColumn).setValue(getFileURL(pdfFile.getId()))
 
+            // Send an email to the NDA recipient
             sendMail(item.data['Email Address'], item.data['Full Name'], pdfFile)
+
+            // Save the status as sent in the NDA spreadsheet
+            formSheet.getRange(item.rowIndex, statusColumn).setValue('Sent')
+
+            // Remove the Docs file
+            removeFile(driveFile.getId())
 
         })
 
@@ -140,11 +176,21 @@ function run() {
 
 /**
  * Returns the Column index number based on name
+ * @returns {int}
  */
-function getColumnIndexByName(ColumnName) {
-    var sheet = SpreadsheetApp.getActive().getSheetByName('Form Responses')
+function getColumnIndexByName(columnName) {
+
+    // Get the current spreadsheet
+    var activeSpreadsheet = SpreadsheetApp.getActive()
+
+    // Get the responses sheet
+    var sheet = activeSpreadsheet.getSheetByName('Form Responses')
+
+    // Get the data
     var data = sheet.getDataRange().getValues()
-    return data[0].indexOf(ColumnName) + 1
+
+    // Get the index of the column
+    return data[0].indexOf(columnName) + 1
 }
 
 /**
@@ -153,9 +199,11 @@ function getColumnIndexByName(ColumnName) {
 function toggleTrigger() {
     try {
 
-        var sheet = SpreadsheetApp.getActive()
+        // Get the current spreadsheet
+        var activeSpreadsheet = SpreadsheetApp.getActive()
+
         ScriptApp.newTrigger('run')
-            .forSpreadsheet(sheet)
+            .forSpreadsheet(activeSpreadsheet)
             .onFormSubmit()
             .create()
 
@@ -167,27 +215,78 @@ function toggleTrigger() {
 }
 
 /**
+ * Gets the spreadsheet namedRanged
+ * @returns {object}
+ */
+function getNamedRanges() {
+
+    // Get the current spreadsheet
+    var activeSpreadsheet = SpreadsheetApp.getActive()
+
+    // Get the spreadsheet named ranges
+    var namedRanges = activeSpreadsheet.getNamedRanges()
+
+    // Map each named range with the name and the range information
+    return namedRanges.map(function(namedRange) {
+        return {
+            name: namedRange.getName(),
+            range: namedRange.getRange()
+        }
+    })
+}
+
+/**
+ * Gets the spreadsheet namedRanged
+ * @param {string} name - The name of the range
+ * @returns {Range}
+ */
+function getNamedRange(name) {
+
+    // Get the spreadsheet named ranges
+    var namedRanges = getNamedRanges()
+
+    // Get the range by name
+    var range = null
+    namedRanges.forEach(function(namedRange) {
+        if (namedRange.name === name) {
+            range = namedRange.range
+        }
+    })
+
+    return range
+}
+
+/**
  * Gets the user settings
  * @returns {object}
  */
 function getSettings() {
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Settings')
-    return {
-        template: sheet.getRange('C2').getValue(),
-        email_subject: sheet.getRange('C4').getValue(),
-        email_body: sheet.getRange('C6').getValue(),
-        repository: sheet.getRange('C8').getValue()
-    }
+
+    // Get the spreadsheet named ranges
+    var namedRanges = getNamedRanges()
+
+    // Init the object
+    var settings = {}
+
+    // Get each range name and value and mock into the settings object
+    namedRanges.forEach(function(namedRange) {
+        settings[namedRange.name] = namedRange.range.getValue()
+    })
+
+    return settings
 }
 
 /**
  * Get the NDA From data formatted from range
+ * @returns {object}
  */
 function getNDAFormData() {
 
+    // Get the current spreadsheet
+    var activeSpreadsheet = SpreadsheetApp.getActive()
+
     // Get all data
-    var data = SpreadsheetApp
-        .getActiveSpreadsheet()
+    var data = activeSpreadsheet
         .getSheetByName('Form Responses')
         .getDataRange()
         .getValues()
@@ -203,7 +302,7 @@ function getNDAFormData() {
             }
         })
         .filter(function(item) {
-        if (item.data['NDA Status'] !== 'sent') {
+        if (item.data['NDA Status'] !== 'Sent') {
             delete item.data['Timestamp']
             delete item.data['NDA Status']
             delete item.data['NDA Link PDF']
@@ -216,6 +315,7 @@ function getNDAFormData() {
 
 /**
  * Get json formatted from data
+ * @returns {object}
  */
 function parseDataToJsonArray(data) {
 
@@ -226,15 +326,19 @@ function parseDataToJsonArray(data) {
     var row = []
 
     for (var i = 1, l = data.length; i < l; i++) {
-        // get a row to fill the object
+
+        // Get a row to fill the object
         row = data[i]
-        // clear object
+
+        // Clear object
         obj = {}
+
         for (var col = 0; col < cols; col++) {
-            // fill object with new values
+            // Fill object with new values
             obj[headers[col]] = row[col]
         }
-        // add object in a final result
+
+        // Add object in a final result
         result.push(obj)
     }
 
@@ -242,18 +346,38 @@ function parseDataToJsonArray(data) {
 }
 
 /**
- * Sends an email
- * @param {string} emailAddress A destination email address
- * @param {string} fullName A full name of email address owner
- * @param {File} attachment A DriveApp File instance
+ * Show an UI dialog
+ * @param {string} title - Dialog title
+ * @param {string} message - Dialog message
+ */
+function showUiDialog(title, message) {
+    try {
+        var ui = SpreadsheetApp.getUi()
+        ui.alert(title, message, ui.ButtonSet.OK)
+    } catch (e) {
+        Logger.log('Error on show dialog' + e)
+    }
+}
+
+
+/**
+ * Send an email with an attachment
+ * @param {string} emailAddress - Recipient email address
+ * @param {string} fullName - Recipient full name
+ * @param {File} attachment - DriveApp File instance
  */
 function sendMail(emailAddress, fullName, attachment) {
-    var emailSubject = SpreadsheetApp.getActive().getSheetByName('Settings').getRange('C4').getValue()
-    var emailContent = SpreadsheetApp.getActive().getSheetByName('Settings').getRange('C6').getValue()
 
-    // Parse line breaks
+    // Get the email subject
+    var emailSubject = NDA_SETTINGS['email_subject']
+
+    // Get the email content
+    var emailContent = NDA_SETTINGS['email_body']
+
+    // Convert line breaks to html format
     emailContent = emailContent.replace(/(\r\n|\n|\r)/gm, '<br>')
     var body = '<p>Hello ' + fullName + ',</p><p>' + emailContent + '</p>'
 
+    // Send the email
     MailApp.sendEmail(emailAddress, emailSubject, body, {htmlBody: body, attachments: [attachment]})
 }
